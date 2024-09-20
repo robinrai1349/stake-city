@@ -4,7 +4,7 @@ import axios from 'axios';
 const GEOCODING_URL = 'https://api.mapbox.com/geocoding/v5/mapbox.places/';
 const ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 
-const SearchBar = ({ onSearch }) => {
+const SearchBar = ({ onSearch, style}) => {
   const [query, setQuery] = useState('');
 
   const handleSearch = async () => {
@@ -22,7 +22,7 @@ const SearchBar = ({ onSearch }) => {
   };
 
   return (
-    <div className="flex items-center space-x-4 p-4">
+    <div style={style} className="flex items-center">
       <input 
         type="text" 
         value={query} 
@@ -32,7 +32,7 @@ const SearchBar = ({ onSearch }) => {
       />
       <button 
         onClick={handleSearch} 
-        className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="ml-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         Search
       </button>
