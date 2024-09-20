@@ -2,11 +2,17 @@ import React, { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-mapboxgl.accessToken = 'pk.eyJ1Ijoicm9iaW5yYWkxMzQ5IiwiYSI6ImNtMTlsOHN5aDFob2gya3NjZGo5MmNneWYifQ.cJcoZ2HGa3koVMYFWPTJFw';
+mapboxgl.accessToken = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 
-const MapboxMap = ({ position, searchPerformed }) => {
+const MapboxMap = ({ position, searchPerformed, showControls }) => {
   const mapContainer = useRef(null);
-  const mapRef = useRef(null); // Ref to store the map instance
+  const mapRef = useRef(null);
+  const navigationControlRef = useRef(null);
+
+  const MIN_ZOOM = 1; // Minimum zoom level
+  const MAX_ZOOM = 20; // Maximum zoom level
+  const secondsPerRevolution = 240; // Speed of spinning
+  let spinEnabled = true;
 
   useEffect(() => {
     if (mapContainer.current) {
@@ -14,64 +20,109 @@ const MapboxMap = ({ position, searchPerformed }) => {
         container: mapContainer.current,
         style: 'mapbox://styles/robinrai1349/cm1apho4200fz01pc323f11og',
         projection: 'globe',
-        zoom: searchPerformed ? 7 : 1, // Initial zoom level
-        center: position || [0, 0], // Initial position, default to [0, 0]
+        zoom: searchPerformed ? 7 : 1,
+        center: position || [0, 0],
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+        scrollZoom: false, // Disable scroll zoom initially
+        keyboard: false, // Disable keyboard controls initially
       });
 
-      mapRef.current = map; // Store the map instance in the ref
+      mapRef.current = map;
 
-      map.addControl(new mapboxgl.NavigationControl()); // Add zoom and rotation controls
-
-      map.on('style.load', () => {
-        map.setFog({}); // Optional fog effect
-      });
-
-      // Spin the globe when no search is performed
-      const secondsPerRevolution = 240;
-      const maxSpinZoom = 5;
-      const slowSpinZoom = 3;
       let userInteracting = false;
-      const spinEnabled = true;
 
-      function spinGlobe() {
-        const zoom = map.getZoom();
-        if (spinEnabled && !userInteracting && zoom < maxSpinZoom) {
-          let distancePerSecond = 360 / secondsPerRevolution;
-          if (zoom > slowSpinZoom) {
-            const zoomDif = (maxSpinZoom - zoom) / (maxSpinZoom - slowSpinZoom);
-            distancePerSecond *= zoomDif;
-          }
+      const spinGlobe = () => {
+        if (spinEnabled && !userInteracting) {
+          const distancePerSecond = 360 / secondsPerRevolution;
           const center = map.getCenter();
           center.lng -= distancePerSecond;
           map.easeTo({ center, duration: 1000, easing: (n) => n });
         }
-      }
+      };
 
-      map.on('mousedown', () => { userInteracting = true; });
-      map.on('dragstart', () => { userInteracting = true; });
+      const spinInterval = setInterval(spinGlobe, 1000);
 
-      map.on('moveend', () => { spinGlobe(); });
-      spinGlobe();
+      map.on('mousedown', () => { 
+        userInteracting = true; 
+        spinEnabled = false; // Stop spinning on user interaction
+      });
+      map.on('dragend', () => {
+        userInteracting = false;
+        map.scrollZoom.enable(); // Enable scroll zoom after user drags
+      });
 
-      return () => map.remove();
+      map.on('rotate', () => {
+        map.scrollZoom.enable(); // Enable zooming after the first rotation
+        map.keyboard.enable(); // Enable keyboard controls
+        spinEnabled = false; // Stop spinning after rotation
+      });
+
+      return () => {
+        clearInterval(spinInterval);
+        map.remove();
+      };
     }
   }, []);
 
-  // Animate the map when a new search is performed
   useEffect(() => {
     if (searchPerformed && position && mapRef.current) {
       mapRef.current.flyTo({
-        center: position, // The [longitude, latitude] of the location
-        zoom: 10,         // Target zoom level
-        speed: 1.5,       // Fly speed (1 is default, higher is faster)
-        curve: 1.2,       // How the animation should progress (1 is linear)
-        easing: (t) => t, // Easing function (can be customized)
-        essential: true   // This animation is essential, so the user cannot stop it
+        center: position,
+        zoom: 10,
+        speed: 1.5,
+        curve: 1.2,
+        easing: (t) => t,
+        essential: true
       });
-    }
-  }, [position, searchPerformed]); // Trigger this effect when position or searchPerformed changes
 
-  return <div ref={mapContainer} style={{ width: '100%', height: '100vh' }} />;
+      // Enable zooming after a search is performed
+      if (mapRef.current) {
+        mapRef.current.scrollZoom.enable();
+        mapRef.current.keyboard.enable();
+        spinEnabled = false; // Stop spinning after search
+      }
+    }
+  }, [position, searchPerformed]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      if (navigationControlRef.current) {
+        mapRef.current.removeControl(navigationControlRef.current);
+      }
+
+      if (showControls) {
+        const navigationControl = new mapboxgl.NavigationControl();
+        mapRef.current.addControl(navigationControl);
+        navigationControlRef.current = navigationControl;
+      }
+    }
+  }, [showControls]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (mapRef.current) {
+        if (event.key === '-') {
+          mapRef.current.zoomOut();
+        } else if (event.key === '+' || event.key === '=' || event.key === 'NumpadAdd') { // Handle zoom in with '+'
+          mapRef.current.zoomIn();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  return (
+    <div 
+      ref={mapContainer} 
+      style={{ width: '100%', height: '100vh', outline: 'none' }} // Remove outline
+      tabIndex="0" // Make the div focusable for keyboard controls
+    />
+  );
 };
 
 export default MapboxMap;
